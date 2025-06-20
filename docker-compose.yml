@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: genomeinsight
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schemas:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:6.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: genomeinsight
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7.0-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway (Express.js)
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/genomeinsight
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/genomeinsight?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=dev-jwt-secret-change-in-production
+      - NODE_ENV=development
+    volumes:
+      - ./backend/api-gateway:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Genomics Processing Service (FastAPI)
+  genomics-service:
+    build:
+      context: ./backend/genomics-service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/genomeinsight?authSource=admin
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./backend/genomics-service:/app
+      - genomics_uploads:/app/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # File Service (Node.js)
+  file-service:
+    build:
+      context: ./backend/file-service
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/genomeinsight?authSource=admin
+      - UPLOAD_PATH=/app/uploads
+      - MAX_FILE_SIZE=5368709120
+    volumes:
+      - ./backend/file-service:/app
+      - /app/node_modules
+      - genomics_uploads:/app/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
+      - NEXT_PUBLIC_GENOMICS_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:
+  genomics_uploads:
+
+networks:
+  default:
+    name: genomeinsight-network
