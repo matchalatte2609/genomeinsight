@@ -114,6 +114,27 @@ services:
       mongodb:
         condition: service_healthy
     restart: unless-stopped
+  
+  # File processing
+  file-processing:
+    build: ./services/file-processing
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./services/file-processing:/app
+      - file_uploads:/app/uploads
+      - file_processed:/app/processed
+    environment:
+      - POSTGRESQL_URL=postgresql://genomeinsight:genomeinsight123@postgres:5432/genomeinsight
+      - MONGODB_URL=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+      - API_GATEWAY_URL=http://api-gateway:3001
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+    networks:
+      - genomeinsight-network
 
   # Frontend (Next.js)
   frontend:
@@ -143,26 +164,7 @@ volumes:
   file_processed:
 
 networks:
-  default:
-    name: genomeinsight-network
+  genomeinsight-network:
+    driver: bridge
 
 
-file-processing:
-  build: ./services/file-processing
-  ports:
-    - "8002:8002"
-  volumes:
-    - ./services/file-processing:/app
-    - file_uploads:/app/uploads
-    - file_processed:/app/processed
-  environment:
-    - POSTGRESQL_URL=postgresql://genomeinsight:genomeinsight123@postgres:5432/genomeinsight
-    - MONGODB_URL=mongodb://mongodb:27017
-    - REDIS_URL=redis://redis:6379
-    - API_GATEWAY_URL=http://api-gateway:3001
-  depends_on:
-    - postgres
-    - mongodb
-    - redis
-  networks:
-    - genomeinsight-network

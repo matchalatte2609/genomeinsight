@@ -14,10 +14,8 @@ python-magic==0.4.27
 pydantic==2.5.0
 pydantic-settings==2.1.0
 
-# Bioinformatics libraries
+# Basic bioinformatics (only biopython for now)
 biopython==1.81
-pysam==0.22.0
-cyvcf2==0.30.22
 
 # Background tasks and queuing
 celery==5.3.4
