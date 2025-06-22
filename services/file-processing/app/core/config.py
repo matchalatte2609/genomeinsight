@@ -1,78 +1,127 @@
+"""
+Core configuration settings for the file processing service.
+Fixed to properly read Docker environment variables.
+"""
+
 from pydantic_settings import BaseSettings
-from typing import Optional
+from pydantic import Field
 import os
+from typing import Optional
+
 
 class Settings(BaseSettings):
-    # Application
-    app_name: str = "GenomeInsight File Processing Service"
-    version: str = "1.0.0"
-    debug: bool = True
+    """Application settings with proper Docker environment variable handling."""
     
-    # Database connections
-    postgresql_url: str = "postgresql://genomeinsight:genomeinsight123@localhost:5432/genomeinsight"
-    mongodb_url: str = "mongodb://localhost:27017"
-    mongodb_database: str = "genomeinsight"
-    redis_url: str = "redis://localhost:6379"
+    # Database Configuration
+    postgresql_url: str = Field(
+        default="postgresql://genomeinsight:genomeinsight123@localhost:5432/genomeinsight",
+        description="PostgreSQL database URL"
+    )
     
-    # File processing
-    max_file_size: int = 500 * 1024 * 1024  # 500MB
-    upload_directory: str = "/app/uploads"
-    processed_directory: str = "/app/processed"
-    allowed_file_types: list = [
-        "application/gzip",
-        "text/plain",
-        "application/octet-stream",
-        "application/x-bgzip"
-    ]
+    # Redis Configuration  
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        description="Redis connection URL"
+    )
     
-    # Supported genomic file extensions
-    genomic_extensions: list = [
-        ".vcf", ".vcf.gz", ".vcf.bgz",
-        ".bed", ".bed.gz", ".bed.bgz", 
-        ".bam", ".sam",
-        ".fasta", ".fa", ".fasta.gz", ".fa.gz",
-        ".fastq", ".fq", ".fastq.gz", ".fq.gz",
-        ".gff", ".gff3", ".gtf",
-        ".txt", ".tsv", ".csv"
-    ]
+    # MongoDB Configuration
+    mongodb_url: str = Field(
+        default="mongodb://localhost:27017",
+        description="MongoDB connection URL"
+    )
+    mongodb_database: str = Field(
+        default="genomeinsight",
+        description="MongoDB database name"
+    )
     
-    # Security
-    secret_key: str = "your-secret-key-change-in-production"
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    # File Upload Configuration
+    upload_dir: str = Field(
+        default="/app/uploads",
+        description="Directory for uploaded files"
+    )
+    processed_dir: str = Field(
+        default="/app/processed", 
+        description="Directory for processed files"
+    )
+    max_file_size: int = Field(
+        default=1024 * 1024 * 1024,  # 1GB
+        description="Maximum file size in bytes"
+    )
     
-    # External services
-    api_gateway_url: str = "http://localhost:3001"
+    # API Configuration
+    api_host: str = Field(default="0.0.0.0", description="API host")
+    api_port: int = Field(default=8002, description="API port")
+    debug: bool = Field(default=True, description="Debug mode")
+    
+    # External API Configuration
+    clinvar_api_url: str = Field(
+        default="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+        description="ClinVar API URL"
+    )
     
     class Config:
+        """Pydantic configuration."""
         env_file = ".env"
+        env_file_encoding = "utf-8"
         case_sensitive = False
+        # This is the key fix - tell pydantic to read from environment
+        env_prefix = ""
+        
+        # Allow reading from environment variables with different formats
+        @classmethod
+        def prepare_field_env_vars(cls, field_name: str, field_info) -> list[str]:
+            """Generate environment variable names for a field."""
+            return [
+                field_name.upper(),
+                f"GENOMEINSIGHT_{field_name.upper()}",
+                field_name.lower(),
+            ]
 
-# Global settings instance
+    def __init__(self, **kwargs):
+        """Initialize settings with environment variable override."""
+        # Manual environment variable override for Docker
+        env_overrides = {}
+        
+        # Check for PostgreSQL URL in environment
+        if "POSTGRESQL_URL" in os.environ:
+            env_overrides["postgresql_url"] = os.environ["POSTGRESQL_URL"]
+        elif "DATABASE_URL" in os.environ:
+            env_overrides["postgresql_url"] = os.environ["DATABASE_URL"]
+            
+        # Check for Redis URL
+        if "REDIS_URL" in os.environ:
+            env_overrides["redis_url"] = os.environ["REDIS_URL"]
+            
+        # Check for MongoDB URL
+        if "MONGODB_URL" in os.environ:
+            env_overrides["mongodb_url"] = os.environ["MONGODB_URL"]
+            
+        # Merge with any provided kwargs
+        env_overrides.update(kwargs)
+        
+        super().__init__(**env_overrides)
+        
+    def get_database_url(self) -> str:
+        """Get the database URL, ensuring it uses Docker service names in containers."""
+        url = self.postgresql_url
+        
+        # If we're in a Docker container and using localhost, switch to service name
+        if os.environ.get("DOCKER_CONTAINER", "false").lower() == "true":
+            if "localhost" in url:
+                url = url.replace("localhost", "postgres")
+        
+        return url
+
+
+# Create global settings instance
 settings = Settings()
 
-# File type validation mapping
-FILE_TYPE_MAPPING = {
-    ".vcf": "variant_call",
-    ".vcf.gz": "variant_call",
-    ".vcf.bgz": "variant_call",
-    ".bed": "genomic_intervals",
-    ".bed.gz": "genomic_intervals", 
-    ".bed.bgz": "genomic_intervals",
-    ".bam": "alignment",
-    ".sam": "alignment",
-    ".fasta": "sequence",
-    ".fa": "sequence",
-    ".fasta.gz": "sequence",
-    ".fa.gz": "sequence",
-    ".fastq": "raw_reads",
-    ".fq": "raw_reads",
-    ".fastq.gz": "raw_reads",
-    ".fq.gz": "raw_reads",
-    ".gff": "annotation",
-    ".gff3": "annotation",
-    ".gtf": "annotation",
-    ".txt": "generic_text",
-    ".tsv": "tabular",
-    ".csv": "tabular"
-}
+# Debug print to verify environment variables are being read
+if __name__ == "__main__":
+    print("=== GenomeInsight Configuration Debug ===")
+    print(f"PostgreSQL URL: {settings.postgresql_url}")
+    print(f"Redis URL: {settings.redis_url}")
+    print(f"MongoDB URL: {settings.mongodb_url}")
+    print(f"Upload Directory: {settings.upload_dir}")
+    print(f"Debug Mode: {settings.debug}")
+    print("==========================================")
