@@ -194,8 +194,7 @@ genomeinsight/
 ├── 📁 frontend/             # Next.js app (✅ Working UI)
 ├── 📁 database/schemas/     # PostgreSQL initialization
 ├── 🐳 docker-compose-minimal.yml  # Production deployment
-├── 📋 README.md             # This documentation
-└── 🎬 demo-script.md        # Demo recording guide
+└── 📋 README.md       
 ```
 
 ### **Monitoring & Health Checks**
