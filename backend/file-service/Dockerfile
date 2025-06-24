@@ -1,3 +1,4 @@
+# Fixed Dockerfile for backend/file-service/Dockerfile
 FROM node:18-alpine
 
 # Set working directory
@@ -12,32 +13,11 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Create TypeScript config
-RUN echo '{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "lib": ["ES2020"],
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
-}' > tsconfig.json
-
 # Create uploads directory
-RUN mkdir -p /app/uploads
-
-# Build the application
-RUN npm run build
+RUN mkdir -p uploads
 
 # Expose port
 EXPOSE 3002
 
 # Start the application
-CMD ["npm", "run", "dev"]
+CMD ["npm", "start"]

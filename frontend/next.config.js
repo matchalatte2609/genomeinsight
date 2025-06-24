@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Remove experimental options and rewrites
-  // Let the frontend connect directly from the browser
+  // Remove all API rewrites that were causing Docker networking issues
+  // Frontend will connect directly to backend at localhost:8002
 }
 
 module.exports = nextConfig
